@@ -1,0 +1,232 @@
+# version: "3.8"
+
+services:
+  zookeeper:
+    image: confluentinc/cp-zookeeper:7.2.1
+    environment:
+      ZOOKEEPER_CLIENT_PORT: 2181
+      ZOOKEEPER_TICK_TIME: 2000
+    ports:
+      - "2181:2181"
+    networks:
+      - kafka-net  
+
+  kafka-1:
+    image: confluentinc/cp-kafka:7.2.1
+    container_name: kafka-11
+    depends_on:
+      - zookeeper
+    ports:
+      - "29091:29091"
+    environment:
+      KAFKA_BROKER_ID: 1
+      KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,PLAINTEXT_HOST:PLAINTEXT
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka-1:9092,PLAINTEXT_HOST://localhost:29091
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
+      KAFKA_AUTO_CREATE_TOPICS_ENABLE: "false"
+    networks:
+      - kafka-net
+
+  kafka-2:
+    image: confluentinc/cp-kafka:7.2.1
+    container_name: kafka-12
+    depends_on:
+      - zookeeper
+    ports:
+      - "29092:29092"
+    environment:
+      KAFKA_BROKER_ID: 2
+      KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,PLAINTEXT_HOST:PLAINTEXT
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka-2:9093,PLAINTEXT_HOST://localhost:29092
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
+      KAFKA_AUTO_CREATE_TOPICS_ENABLE: "false"
+    networks:
+      - kafka-net  
+
+  kafka-3:
+    image: confluentinc/cp-kafka:7.2.1
+    container_name: kafka-13
+    depends_on:
+      - zookeeper
+    ports:
+      - "29093:29093"
+    environment:
+      KAFKA_BROKER_ID: 3
+      KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,PLAINTEXT_HOST:PLAINTEXT
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka-3:9094,PLAINTEXT_HOST://localhost:29093
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
+      KAFKA_AUTO_CREATE_TOPICS_ENABLE: "false"
+    networks:
+      - kafka-net  
+
+  kafka-ui:
+    image: provectuslabs/kafka-ui:latest
+    ports:
+      - "8083:8080"
+    environment:
+      KAFKA_CLUSTERS_0_NAME: local
+      KAFKA_CLUSTERS_0_BOOTSTRAPSERVERS: kafka-1:9092,kafka-2:9093,kafka-3:9094
+      KAFKA_CLUSTERS_0_ZOOKEEPER: zookeeper:2181
+    depends_on:
+      - kafka-1
+      - kafka-2
+      - kafka-3
+    networks:
+      - kafka-net
+ 
+  init-topics:
+    image: confluentinc/cp-kafka:7.2.1
+    depends_on:
+      - kafka-1
+      - kafka-2
+      - kafka-3
+    entrypoint: [ "/bin/sh", "-c" ]
+    command: >
+      "
+      sleep 30 &&
+      kafka-topics --bootstrap-server kafka-1:9092 --create --if-not-exists --topic test-topic3 --replication-factor 3 --partitions 1 &&
+      kafka-topics --bootstrap-server kafka-1:9092 --create --if-not-exists --topic test-topic4 --replication-factor 3 --partitions 1
+      "
+    networks:
+      - kafka-net 
+
+  postgres:
+    image: postgres:13
+    environment:
+      - POSTGRES_HOST=${POSTGRES_HOST}
+      - POSTGRES_DB=${POSTGRES_DB}
+      - POSTGRES_USER=${POSTGRES_USER}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    networks:
+      - kafka-net  
+
+  pgadmin:
+    image: dpage/pgadmin4
+    environment:
+      - PGADMIN_DEFAULT_EMAIL=${PGADMIN_DEFAULT_EMAIL}
+      - PGADMIN_DEFAULT_PASSWORD=${PGADMIN_DEFAULT_PASSWORD}
+    ports:
+      - "8085:80"
+    depends_on:
+      - postgres
+    networks:
+    - kafka-net
+
+  java-producer:
+    build:
+      context: ./java-producer
+    depends_on:
+      - kafka-1
+    networks:
+      - kafka-net
+  
+  metrics-consumer:
+    build:
+      context: ./metrics-consumer
+    depends_on:
+      - kafka-1
+      - postgres
+    networks:
+      - kafka-net
+
+  hadoop-namenode:
+    image: bde2020/hadoop-namenode:2.0.0-hadoop3.2.1-java8
+    container_name: hadoop-namenode
+    environment:
+      - CLUSTER_NAME=bigdata-cluster
+    ports:
+      - "9870:9870"
+      - "8020:8020"
+    volumes:
+      - hadoop-config:/etc/hadoop
+    networks:
+      - kafka-net
+
+  hadoop-datanode1:
+    image: bde2020/hadoop-datanode:2.0.0-hadoop3.2.1-java8
+    container_name: hadoop-datanode1
+    environment:
+      - CLUSTER_NAME=bigdata-cluster
+      - CORE_CONF_fs_defaultFS=hdfs://hadoop-namenode:8020
+    volumes:
+      - datanode1:/hadoop/dfs/data
+    networks:
+      - kafka-net
+
+  hadoop-datanode2:
+    image: bde2020/hadoop-datanode:2.0.0-hadoop3.2.1-java8
+    container_name: hadoop-datanode2
+    environment:
+      - CLUSTER_NAME=bigdata-cluster
+      - CORE_CONF_fs_defaultFS=hdfs://hadoop-namenode:8020
+    volumes:
+      - datanode2:/hadoop/dfs/data
+    networks:
+      - kafka-net
+
+  spark-master:
+    image: bitnami/spark:3
+    container_name: spark-master
+    environment:
+      - SPARK_MODE=master
+    ports:
+      - "7077:7077"
+      - "8088:8080"
+    networks:
+      - kafka-net
+
+  spark-worker:
+    image: bitnami/spark:3
+    container_name: spark-worker
+    environment:
+      - SPARK_MODE=worker
+      - SPARK_MASTER_URL=spark://spark-master:7077
+    depends_on:
+      - spark-master
+    ports:
+      - "8087:8081"
+    networks:
+      - kafka-net
+
+  spark-app:
+    build: ./logs_consumer
+    depends_on:
+      - kafka-1
+      - spark-master
+      - hadoop-namenode
+    volumes:
+      - ./logs_consumer:/app
+      - hadoop-config:/etc/hadoop:ro
+    command: >
+      spark-submit 
+      --master spark://spark-master:7077 
+      --packages org.apache.spark:spark-sql-kafka-0-10_2.12:3.2.1 
+      /app/app.py  
+    networks:
+      - kafka-net
+
+volumes:
+  pgdata:
+  datanode1:
+  datanode2:
+  hadoop-config:
+    external: false
+
+networks:
+  kafka-net:
+    driver: bridge
+
+
