@@ -42,11 +42,29 @@ Stores output as Parquet files in HDFS.
 Namenode + (2) Datanodes.
 
 ## Secrets & Environment Variables
-All secrets like pgAdmin & database passwords are managed via a `.env` file and loaded securely by services like PostgreSQL, Python consumer, and pgAdmin.
+- All secrets like pgAdmin & database passwords are managed via a `.env` file and loaded securely by services like PostgreSQL, Python consumer, and pgAdmin.
+- You will create `.env` file in the project directory, then you will write passwords in the file like this:
+```
+POSTGRES_USER=postgres_user
+POSTGRES_PASSWORD=postgres_password
+POSTGRES_DB=postgres_db
+POSTGRES_HOST=postgres_host
+
+PGADMIN_DEFAULT_EMAIL=your_email_here
+PGADMIN_DEFAULT_PASSWORD=your_password_here
+```
 
 ## Setup Instructions  
 ### 1. Clone the Repository  
 clone the repository or download it to your local machine.
+
+### 2.Generate JAR File
+In this step you should have Apache Maven in your system, Then run:
+```
+cd java-producer
+mvn clean package
+```
+This will generate a JAR file inside `target/`.
 
 ### 2.Run the Project Using Docker
 ```
